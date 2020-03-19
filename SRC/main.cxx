@@ -2,33 +2,21 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <iostream>
-#include<math.h>
-#include<vector>
-#include<memory>
+#include <math.h>
+#include <vector>
+#include <memory>
 #include <chrono> 
 #include <string> 
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
-struct pixel
-{
-	int row;
-	int column;
-	int disparity;
-};
+shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int );
 int numOfColumns;
 int numOfRows;
-int thickness = 60;
-int maxDisparity = 30;
-int maxkernelSize = 35; // kernel size must be odd number.
-typedef vector<pixel*> layerVector;
-vector<layerVector> layers;
+int maxDisparity = 10;
+int kernelSize = 16;
 void ReadBothImages(shared_ptr<Mat>, shared_ptr<Mat>);
-void Meshing(int, int, int, int, int);
-double CalcDistance(int, int, int, int);
-int CalcCost(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int, int);
-void stereo(shared_ptr<Mat>, shared_ptr<Mat>, layerVector*, int, int);
-void makeResult(vector<layerVector>, int, int,int, string);
+
 
 int main()
 {
@@ -38,33 +26,30 @@ int main()
 	ReadBothImages(leftImage, rightImage);
 	numOfRows = leftImage->rows;
 	numOfColumns = leftImage->cols;
-	Meshing(numOfRows, numOfColumns, thickness, maxkernelSize, maxDisparity);
-	for (int kernelSize = 3; kernelSize < maxkernelSize; kernelSize = kernelSize + 2) {
-		auto start = chrono::high_resolution_clock::now();
-
-		try
-		{
-			for (int i = 0; i < layers.size(); i++) {
-				stereo(leftImage, rightImage, &layers[i], kernelSize, maxDisparity);
-			}
-		}
-		catch (cv::Exception & e)
-		{
-			cerr << e.msg << endl; // output exception message
-		}
-
-
-		chrono::high_resolution_clock::time_point stop = high_resolution_clock::now();
-		auto duration = duration_cast<seconds>(stop - start);
-		auto value = duration.count();
-		string duration_s=to_string(value);
-		
-		makeResult(layers, numOfRows, numOfColumns, kernelSize, duration_s);
+	auto start = chrono::high_resolution_clock::now();
+	
+	try
+	{
+		auto result =stereo(leftImage, rightImage, kernelSize, maxDisparity);
+		imshow("result", *result);
+		waitKey(12);
+	}
+	catch (cv::Exception & e)
+	{
+		cerr << e.msg << endl; // output exception message
 	}
 
-	cout << layers.size() << endl;
+	chrono::high_resolution_clock::time_point stop = high_resolution_clock::now();
+	auto duration = duration_cast<seconds>(stop - start);
+	auto value = duration.count();
+	string duration_s = to_string(value);
+
+
+
 	cout << "hello" << endl;
 	int x;
+
+
 	cin >> x;// Show our image inside it.
 			 // Wait for a keystroke in the window
 	return 0;
@@ -101,105 +86,50 @@ void ReadBothImages(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage) {
 
 
 ////////////////////////////////////////////////////////////////////
-/// In this part we clac layer of each pixel.
-////////////////////////////////////////////////////////////////////
-void Meshing(int numOfRows, int numOfColumns, int thickness, int kernelSize, int maxDisparity) {
-	int tempLayer = 0;
-	int numOfLayers =int( CalcDistance(numOfRows, numOfColumns, 0, 0) / thickness);
-	// the number 4 thai wrote there is for ensure that all of the image has suported... dont wworry... we have delete those who is null.
-	for (int i = 1; i <= numOfLayers+4; i++) {
-		layerVector tempLayer;
-		layers.push_back(tempLayer);
-	}
-	for (int i = (kernelSize/2); i < numOfRows-(kernelSize/2) ; i++) {
-		for (int j = (kernelSize / 2); j < numOfColumns-(kernelSize / 2)-maxDisparity; j++) {
-			tempLayer=int(CalcDistance(numOfRows, numOfColumns, i, j)/ thickness);
-			pixel* tempLocation = new pixel;
-			tempLocation->row = i;
-			tempLocation->column = j;
-			layers.at(tempLayer).push_back(tempLocation);
-		}
-	}
-	// this part is added to avoid vector with zeero size.
-	for (int i = layers.size() - 1; i >= 0; i = i - 1) {
-		if (layers[i].size() == 0) {
-			layers.erase(layers.begin() + i);
-		}
-	}
-}
-
-
-////////////////////////////////////////////////////////////////////
-/// In this part we clac distance of each pixel.
-////////////////////////////////////////////////////////////////////
-double CalcDistance(int numOfRows, int numOfColumns, int row, int column) {
-	double tempDistance = sqrt(pow((row-numOfRows),2) + pow((column - int(numOfColumns / 2) + .05) , 2));
-	return tempDistance;
-}
-
-
-////////////////////////////////////////////////////////////////////
-/// In this part we clac disparity of each pixel.
-////////////////////////////////////////////////////////////////////
-void stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, layerVector* layer, int kernelSize, int maxDisparity) {
-	imshow("leftImage", *leftImage);
-	imshow("rightImage", *rightImage);
-	waitKey(12);
-	int tempCost = 0;
-	int tempDisparity = 0;
-	for (int p = 1; p < layer->size(); p++) {
-		//cout << "the alye size is " << layer->size() << endl;
-		//cout << "disparity is  " << p << endl;
-		double cost = 10000000;
-	    tempCost = 0;
-		tempDisparity = 0;
-		for (int i = 0; i < maxDisparity; i++) {
-			tempCost= CalcCost(leftImage, rightImage, (*layer)[p]->row, (*layer)[p]->column, kernelSize, i);
-			if (tempCost < cost) {
-				cost = tempCost;
-				tempDisparity = i;
-			}
-		}
-		(*layer)[p]->disparity = tempDisparity;
-	}
-}
-
-
-////////////////////////////////////////////////////////////////////
 /// In this part we clac cost of each pixel for sepecfic disparity.
 ////////////////////////////////////////////////////////////////////
 int CalcCost(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int row, int column, int kernelSize, int disparity) {
 	int cost=0;
 	for (int u = -int(kernelSize / 2); u <= int(kernelSize / 2); u++) {
 		for (int v = -int(kernelSize / 2); v <= int(kernelSize / 2); v++) {
-			int temp1 = row + u;
-			int temp2 = column + v;
-			int temp3 = row + u + disparity;
-			int temp4 = column + v;
-			// for error handeling.
-			if (column + u + disparity > numOfColumns) {
-				cout << "*****************************************************" << endl;
-			}
-			cost = cost + int(pow((leftImage->at<uchar>(row + v, column + u) - (rightImage->at<uchar>(row + v , column + u+ disparity))),2));
+			cost = cost + int(pow((leftImage->at<uchar>(row + v, column + u) - (rightImage->at<uchar>(row + v, column + u + disparity))), 2));
 		}
 	}
 	return cost;
+}
+
+////////////////////////////////////////////////////////////////////
+/// In this part we clac disparity of each pixel.
+////////////////////////////////////////////////////////////////////
+shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity) {
+	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8UC1);
+	//imshow("leftImage", *leftImage);
+	//imshow("rightImage", *rightImage);
+	//waitKey(12);
+	int cost;
+	int tempCost;
+	int tempDisparity;
+	
+
+	for (int u = int(kernelSize / 2); u < numOfColumns - int(kernelSize / 2) - maxDisparity; u++) {
+		for (int v = int(kernelSize / 2); v < numOfRows- int(kernelSize / 2); v++) {
+			tempCost = 10000;
+			tempDisparity = 0;
+			for (int i = 0; i < maxDisparity; i++) {
+				cost = CalcCost(leftImage, rightImage, v, u, kernelSize, i);
+				if (cost < tempCost) { tempCost = cost; tempDisparity = i; }
+			}
+			result->at<uchar>(Point(u, v)) = uchar(tempDisparity / maxDisparity * 255);
+		}
+	}
+	return result;
+
 }
 
 
 ////////////////////////////////////////////////////////////////////
 /// In this part we can make the result.
 ////////////////////////////////////////////////////////////////////
-void makeResult(vector<layerVector> layers, int numOfRows, int numOfColumns,int kernalSize, string Dutime) {
-	Mat result(numOfRows, numOfColumns, CV_8UC1);
-	for (int i = 0; i < layers.size(); i++) {
-		for (int j = 0; j < layers[i].size(); j++) {
-			result.at<uchar>(layers[i][j]->row, layers[i][j]->column) = uchar(255*layers[i][j]->disparity/30);
-		}
+void makeResult() {
 
-	}
-	string temp;
-	
-	temp = "result_KernelSize_" + to_string(kernalSize)+"_MaxDisparity_"+ to_string(maxDisparity)+"Time_"+Dutime +"s.png";
-	imwrite(temp, result);
 }
