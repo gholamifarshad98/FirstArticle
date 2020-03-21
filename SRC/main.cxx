@@ -7,6 +7,7 @@
 #include <memory>
 #include <chrono> 
 #include <string> 
+#include<fstream>
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
@@ -20,20 +21,23 @@ void ReadBothImages(shared_ptr<Mat>, shared_ptr<Mat>);
 int main()
 {
 	int maxDisparity = 30;
-	int kernelSize = 35;
+	int kernelSize = 32;
 	auto rightImage = make_shared<Mat>();
 	auto leftImage = make_shared<Mat>();
 	auto result = make_shared<Mat>();
 
+////////////////////////////////////////////////////////////////////
+/// In this part we call readingImages function.
+////////////////////////////////////////////////////////////////////
 	auto startImread = chrono::high_resolution_clock::now();
 	ReadBothImages(leftImage, rightImage);
 	auto endImread = chrono::high_resolution_clock::now();
-
-
 	numOfRows = leftImage->rows;
 	numOfColumns = leftImage->cols;
 
-
+////////////////////////////////////////////////////////////////////
+/// In this part we call stereo function.
+////////////////////////////////////////////////////////////////////
 	auto startStereo = chrono::high_resolution_clock::now();
 	try
 	{
@@ -45,19 +49,31 @@ int main()
 	}
 	auto endStereo = chrono::high_resolution_clock::now();
 	
-
-	auto durationImread = duration_cast<milliseconds>(endImread - startImread);
-	auto durationStero= duration_cast<milliseconds>(endImread - startImread);
-	auto durationTotall = durationStero + durationImread;
+////////////////////////////////////////////////////////////////////
+/// In this part we report the results.
+////////////////////////////////////////////////////////////////////
+	std::chrono::duration<int, std::milli> durationImread = duration_cast<milliseconds>(endImread - startImread);
+	std::chrono::duration<int, std::milli> durationStero= duration_cast<milliseconds>(endStereo - startStereo);
+	std::chrono::duration<int, std::milli> durationTotall = durationStero + durationImread;
 	auto valueImread = durationImread.count();
 	string durationImread_s = to_string(valueImread);
-	auto valueStero = durationStero.count();
-	string durationStero_s = to_string(valueStero);
+	auto valueStereo = durationStero.count();
+	string durationStero_s = to_string(valueStereo);
 	auto valueTotall = durationTotall.count();
 	string durationTotall_s = to_string(valueTotall);
+	//Object for repoting results in a text file.
+	ofstream repotringResult;
+	repotringResult.open("resultsSimpleStereo.txt");
+	repotringResult << "Image numOfRows = " << numOfRows << endl;
+	repotringResult << "Image numOfColumns = " << numOfColumns << endl;
+	repotringResult << "kernel size is = " << kernelSize << endl;
+	repotringResult << "maxDisparity is = " << maxDisparity << endl;
+	repotringResult << "duration of Reading Images = " << durationImread_s << "(ms)" << endl;
+	repotringResult << "duration of Stereo = " << durationStero_s <<"(ms)"<< endl;
+	repotringResult << "duration of Totall = " << durationTotall_s << "(ms)" << endl;
+	repotringResult.close();
 
-
-	imwrite("result.png", *result);
+	imwrite("resultSimpleStereo.png", *result);
 	return 0;
 }
 
@@ -121,6 +137,7 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 			result->at<uchar>(j, i) = uchar(255* selectDisparity/maxDisparity);
 		}
 	}
+	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
 	for (int j = 0; j < (kernelSize / 2); j++) {
 		for (int i = 0; i < numOfColumns; i++) {
 			result->at<uchar>(j, i) = uchar(1);
@@ -130,37 +147,3 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 
 	return result;
 }
-
-
-////////////////////////////////////////////////////////////////////
-/// In this part we can make the result.
-////////////////////////////////////////////////////////////////////
-void makeResult() {
-
-
-}
-
-//
-//
-//for (int u = int(kernelSize / 2); u < numOfColumns - int(kernelSize / 2) - maxDisparity; u++) {
-//	for (int v = int(kernelSize / 2); v < numOfRows - int(kernelSize / 2); v++) {
-//		tempCost = 9000000000;
-//		tempDisparity = 0;
-//		endCost = 0;
-//		for (int i = 0; i < maxDisparity; i++) {
-//			endCost = CalcCost(leftImage, rightImage, v, u, kernelSize, i);
-//			//	cout << cost << endl;
-//			if (endCost < tempCost) {
-//				tempCost = endCost;
-//				tempDisparity = i;
-//				cout << tempDisparity << endl;
-//			}
-//			else {
-//				//cout << "no" << endl;
-//			}
-//		}
-//		int a = 2;
-//		result->at<uchar>(v, u) = uchar(tempDisparity * 255 / 10);
-//		cout << tempDisparity << endl;
-//	}
-//}
