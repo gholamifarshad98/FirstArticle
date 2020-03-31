@@ -14,6 +14,8 @@ using namespace std::chrono;
 shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int );
 shared_ptr<Mat> cuttedSSD(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int);
 shared_ptr<Mat> cuttedSSDCrossCheck(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int);
+shared_ptr<Mat> fillteringResult(shared_ptr<Mat>, int, int, int, int);
+int fillterWin(shared_ptr<Mat> , int , int , int , int );
 int numOfColumns;
 int numOfRows;
 
@@ -70,6 +72,18 @@ int main()
 	auto endCuttedSSDCrossCheck = chrono::high_resolution_clock::now();
 
 
+////////////////////////////////////////////////////////////////////
+/// In this part we will fillter the results.
+////////////////////////////////////////////////////////////////////
+	auto startFilltering = chrono::high_resolution_clock::now();
+	int _fillterSizeU = 8;
+	int _fillterSizeV = 8;
+	int _threshold = 30;
+	auto result_cutted_crossCheck_fillterde = fillteringResult(result_cutted_crossCheck, _fillterSizeU, _fillterSizeV, maxDisparity, _threshold);
+
+	imwrite("cuttedSSDCrossCheckFillterd.png", *result_cutted_crossCheck_fillterde);
+	auto endFilltering = chrono::high_resolution_clock::now();
+	
 
 ////////////////////////////////////////////////////////////////////
 /// In this part we report the results.
@@ -77,8 +91,10 @@ int main()
 	std::chrono::duration<int, std::milli> durationImread = duration_cast<milliseconds>(endImread - startImread);
 	std::chrono::duration<int, std::milli> durationSSDCutted= duration_cast<milliseconds>(endCuttedSSD - startCuttedSSD);
 	std::chrono::duration<int, std::milli> durationSSDCuttedCrossCheck = duration_cast<milliseconds>(endCuttedSSDCrossCheck - startCuttedSSDCrossCheck);
+	std::chrono::duration<int, std::milli> durationFilltering = duration_cast<milliseconds>(endFilltering - startFilltering);
 	std::chrono::duration<int, std::milli> durationTotall_cutted = durationSSDCutted + durationImread;
 	std::chrono::duration<int, std::milli> durationTotall_cutted_crossCheck = durationSSDCuttedCrossCheck + durationImread;
+	std::chrono::duration<int, std::milli> durationTotall_cutted_crossCheck_filltering = durationFilltering + durationSSDCuttedCrossCheck + durationImread;
 
 	auto valueImread = durationImread.count();
 	string durationImread_s = to_string(valueImread);
@@ -89,11 +105,18 @@ int main()
 	auto valueSSDCutted_CrossCheck = durationSSDCuttedCrossCheck.count();
 	string durationSSDCuttedCrossCheck_s = to_string(valueSSDCutted_CrossCheck);
 	
+	auto valueFilltering = durationFilltering.count();
+	string duratioFilltering_s = to_string(valueFilltering);
+
 	auto valueTotallSSDCutted = durationTotall_cutted.count();
 	string durationTotallSSDCutted_s = to_string(valueTotallSSDCutted);
 
 	auto valueTotallSSDCutted_CrossCheck = durationTotall_cutted_crossCheck.count();
 	string durationTotallSSDCuttedCrossCheck_s = to_string(valueTotallSSDCutted_CrossCheck);
+
+	auto valueTotallSSDCutted_CrossCheck_Fillering = durationTotall_cutted_crossCheck_filltering.count();
+	string durationTotallSSDCuttedCrossCheckFilltering_s = to_string(valueTotallSSDCutted_CrossCheck_Fillering);
+
 	//Object for repoting results in a text file.
 	ofstream repotringResult;
 	repotringResult.open("cuttedSSD.txt");
@@ -104,8 +127,10 @@ int main()
 	repotringResult << "duration of Reading Images = " << durationImread_s << "(ms)" << endl;
 	repotringResult << "duration of cuttedSSD = " <<durationSSDCutted_s <<"(ms)"<< endl;
 	repotringResult << "duration of cuttedSSD with cross check = " << durationSSDCuttedCrossCheck_s << "(ms)" << endl;
+	repotringResult << "duration of Filltering = " << duratioFilltering_s << "(ms)" << endl;
 	repotringResult << "duration of Totall cuttedSSD= " << durationTotallSSDCutted_s << "(ms)" << endl;
 	repotringResult << "duration of Totall cuttedSSD with CrossCheck= " << durationTotallSSDCuttedCrossCheck_s << "(ms)" << endl;
+	repotringResult << "duration of Totall cuttedSSD with CrossCheck and Filltering= " << durationTotallSSDCuttedCrossCheckFilltering_s << "(ms)" << endl;
 	repotringResult.close();
 
 	return 0;
@@ -182,6 +207,11 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 	return result;
 }
 
+
+////////////////////////////////////////////////////////////////////
+/// In this part we will find the pixels which 
+/// had selected disparity by cutted stereo.
+////////////////////////////////////////////////////////////////////
 shared_ptr<Mat> cuttedSSD(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity, int selectedDisparity) {
 	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
 	int cost_01;
@@ -212,7 +242,10 @@ shared_ptr<Mat> cuttedSSD(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage,
 	return result;
 }
 
-
+////////////////////////////////////////////////////////////////////
+/// In this part we will find the pixels which had selected disparity
+/// by cutted stereo and we will also check them by cross checking. 
+////////////////////////////////////////////////////////////////////
 shared_ptr<Mat> cuttedSSDCrossCheck(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity, int selectedDisparity) {
 	auto result_crossCheck = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
 	int cost_01;
@@ -248,4 +281,37 @@ shared_ptr<Mat> cuttedSSDCrossCheck(shared_ptr<Mat> leftImage, shared_ptr<Mat> r
 		}
 	}
 	return result_crossCheck;
+}
+
+
+////////////////////////////////////////////////////////////////////
+/// In this part we will fillter the result of cuttedSSDCrossCheck.
+////////////////////////////////////////////////////////////////////
+shared_ptr<Mat> fillteringResult(shared_ptr<Mat> input, int fillterSizeU, int fillterSizeV, int maxDisparity, int threshold) {
+	int _sum = 0;
+	auto _result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
+	for (int j = (fillterSizeV / 2)+10; j < numOfRows - (fillterSizeV / 2)-10; j++) {
+		for (int i = (fillterSizeU / 2)+1+10; i < numOfColumns - maxDisparity - (fillterSizeU / 2)-10; i++) {
+			_sum = fillterWin(input, i, j, fillterSizeU, fillterSizeV);
+			if(_sum>= threshold){
+				_result->at<uchar>(j, i) = uchar(255);
+			}
+			else {
+				_result->at<uchar>(j, i) = uchar(0);
+			}
+		}
+	}
+	return _result;
+}
+
+int fillterWin(shared_ptr<Mat> input,int u, int v, int fillterSizeU, int fillterSizeV) {
+	int sum = 0;
+	for (int i = -(fillterSizeU /2); i < (fillterSizeU/2); i++) {
+		for (int j = -(fillterSizeV/2); j < (fillterSizeV/2); j++) {
+			if (input->at<uchar>(v +j , u +i) >= uchar(250)) {
+				sum = sum + 1;
+			}
+		}
+	}
+	return sum;
 }
