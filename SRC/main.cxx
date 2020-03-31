@@ -12,6 +12,8 @@ using namespace cv;
 using namespace std;
 using namespace std::chrono;
 shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int );
+shared_ptr<Mat> cuttedSSD(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int);
+shared_ptr<Mat> cuttedSSDCrossCheck(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int);
 int numOfColumns;
 int numOfRows;
 
@@ -24,7 +26,8 @@ int main()
 	int kernelSize = 32;
 	auto rightImage = make_shared<Mat>();
 	auto leftImage = make_shared<Mat>();
-	auto result = make_shared<Mat>();
+	auto result_cutted = make_shared<Mat>();
+	auto result_cutted_crossCheck = make_shared<Mat>();
 
 ////////////////////////////////////////////////////////////////////
 /// In this part we call readingImages function.
@@ -36,44 +39,75 @@ int main()
 	numOfColumns = leftImage->cols;
 
 ////////////////////////////////////////////////////////////////////
-/// In this part we call stereo function.
+/// In this part we call cuttedSSD function.
 ////////////////////////////////////////////////////////////////////
-	auto startStereo = chrono::high_resolution_clock::now();
+	auto startCuttedSSD = chrono::high_resolution_clock::now();
 	try
 	{
-		result =stereo(leftImage, rightImage, kernelSize, maxDisparity);
+		result_cutted = cuttedSSD(leftImage, rightImage, kernelSize, maxDisparity,12);
+		imwrite("cuttedSSD.png", *result_cutted);
 	}
 	catch (cv::Exception & e)
 	{
 		cerr << e.msg << endl; // output exception message
 	}
-	auto endStereo = chrono::high_resolution_clock::now();
+	auto endCuttedSSD = chrono::high_resolution_clock::now();
 	
+
+////////////////////////////////////////////////////////////////////
+/// In this part we call cuttedSSD with crossCheck function.
+////////////////////////////////////////////////////////////////////
+	auto startCuttedSSDCrossCheck = chrono::high_resolution_clock::now();
+	try
+	{
+		result_cutted_crossCheck = cuttedSSDCrossCheck(leftImage, rightImage, kernelSize, maxDisparity, 12);
+		imwrite("cuttedSSDCrossCheck.png", *result_cutted_crossCheck);
+	}
+	catch (cv::Exception & e)
+	{
+		cerr << e.msg << endl; // output exception message
+	}
+	auto endCuttedSSDCrossCheck = chrono::high_resolution_clock::now();
+
+
+
 ////////////////////////////////////////////////////////////////////
 /// In this part we report the results.
 ////////////////////////////////////////////////////////////////////
 	std::chrono::duration<int, std::milli> durationImread = duration_cast<milliseconds>(endImread - startImread);
-	std::chrono::duration<int, std::milli> durationStero= duration_cast<milliseconds>(endStereo - startStereo);
-	std::chrono::duration<int, std::milli> durationTotall = durationStero + durationImread;
+	std::chrono::duration<int, std::milli> durationSSDCutted= duration_cast<milliseconds>(endCuttedSSD - startCuttedSSD);
+	std::chrono::duration<int, std::milli> durationSSDCuttedCrossCheck = duration_cast<milliseconds>(endCuttedSSDCrossCheck - startCuttedSSDCrossCheck);
+	std::chrono::duration<int, std::milli> durationTotall_cutted = durationSSDCutted + durationImread;
+	std::chrono::duration<int, std::milli> durationTotall_cutted_crossCheck = durationSSDCuttedCrossCheck + durationImread;
+
 	auto valueImread = durationImread.count();
 	string durationImread_s = to_string(valueImread);
-	auto valueStereo = durationStero.count();
-	string durationStero_s = to_string(valueStereo);
-	auto valueTotall = durationTotall.count();
-	string durationTotall_s = to_string(valueTotall);
+	
+	auto valueSSDCutted = durationSSDCutted.count();
+	string durationSSDCutted_s = to_string(valueSSDCutted);
+
+	auto valueSSDCutted_CrossCheck = durationSSDCuttedCrossCheck.count();
+	string durationSSDCuttedCrossCheck_s = to_string(valueSSDCutted_CrossCheck);
+	
+	auto valueTotallSSDCutted = durationTotall_cutted.count();
+	string durationTotallSSDCutted_s = to_string(valueTotallSSDCutted);
+
+	auto valueTotallSSDCutted_CrossCheck = durationTotall_cutted_crossCheck.count();
+	string durationTotallSSDCuttedCrossCheck_s = to_string(valueTotallSSDCutted_CrossCheck);
 	//Object for repoting results in a text file.
 	ofstream repotringResult;
-	repotringResult.open("resultsSimpleStereo.txt");
+	repotringResult.open("cuttedSSD.txt");
 	repotringResult << "Image numOfRows = " << numOfRows << endl;
 	repotringResult << "Image numOfColumns = " << numOfColumns << endl;
 	repotringResult << "kernel size is = " << kernelSize << endl;
 	repotringResult << "maxDisparity is = " << maxDisparity << endl;
 	repotringResult << "duration of Reading Images = " << durationImread_s << "(ms)" << endl;
-	repotringResult << "duration of Stereo = " << durationStero_s <<"(ms)"<< endl;
-	repotringResult << "duration of Totall = " << durationTotall_s << "(ms)" << endl;
+	repotringResult << "duration of cuttedSSD = " <<durationSSDCutted_s <<"(ms)"<< endl;
+	repotringResult << "duration of cuttedSSD with cross check = " << durationSSDCuttedCrossCheck_s << "(ms)" << endl;
+	repotringResult << "duration of Totall cuttedSSD= " << durationTotallSSDCutted_s << "(ms)" << endl;
+	repotringResult << "duration of Totall cuttedSSD with CrossCheck= " << durationTotallSSDCuttedCrossCheck_s << "(ms)" << endl;
 	repotringResult.close();
 
-	imwrite("resultSimpleStereo.png", *result);
 	return 0;
 }
 
@@ -146,4 +180,72 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 
 
 	return result;
+}
+
+shared_ptr<Mat> cuttedSSD(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity, int selectedDisparity) {
+	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
+	int cost_01;
+	int cost_02;
+	int cost_03;
+
+
+	for (int j = (kernelSize / 2); j < numOfRows - (kernelSize / 2); j++) {
+		for (int i = (kernelSize / 2); i < numOfColumns - maxDisparity - (kernelSize / 2); i++) {
+			cost_01 = CalcCost(leftImage, rightImage, j, i, kernelSize, selectedDisparity-1);
+			cost_02 = CalcCost(leftImage, rightImage, j, i, kernelSize, selectedDisparity);
+			cost_03 = CalcCost(leftImage, rightImage, j, i, kernelSize, selectedDisparity + 1);
+			if (cost_02 < cost_03 & cost_02 < cost_01) {
+				result->at<uchar>(j, i) = uchar(255);
+			}
+			else {
+				result->at<uchar>(j, i) = uchar(0);
+			}
+			
+		}
+	}
+	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
+	for (int j = 0; j < (kernelSize / 2); j++) {
+		for (int i = 0; i < numOfColumns; i++) {
+			result->at<uchar>(j, i) = uchar(0);
+		}
+	}
+	return result;
+}
+
+
+shared_ptr<Mat> cuttedSSDCrossCheck(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity, int selectedDisparity) {
+	auto result_crossCheck = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
+	int cost_01;
+	int cost_02;
+	int cost_03;
+	int cost_04;
+	int cost_05;
+	int cost_06;
+
+
+	for (int j = (kernelSize / 2); j < numOfRows - (kernelSize / 2); j++) {
+		for (int i = (kernelSize / 2)+1 ; i < numOfColumns - maxDisparity - (kernelSize / 2); i++) {
+			cost_01 = CalcCost(leftImage, rightImage, j, i, kernelSize, selectedDisparity - 1);
+			cost_02 = CalcCost(leftImage, rightImage, j, i, kernelSize, selectedDisparity);
+			cost_03 = CalcCost(leftImage, rightImage, j, i, kernelSize, selectedDisparity + 1);
+
+			cost_04 = CalcCost(rightImage, leftImage, j, i, kernelSize, -(selectedDisparity - 1));
+			cost_05 = CalcCost(rightImage, leftImage, j, i, kernelSize, -(selectedDisparity));
+			cost_06 = CalcCost(rightImage, leftImage, j, i, kernelSize, -(selectedDisparity + 1));
+			if (cost_02 < cost_03 & cost_02 < cost_01 & cost_05 < cost_06 & cost_05 < cost_04) {
+				result_crossCheck->at<uchar>(j, i) = uchar(255);
+			}
+			else {
+				result_crossCheck->at<uchar>(j, i) = uchar(0);
+			}
+
+		}
+	}
+	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
+	for (int j = 0; j < (kernelSize / 2); j++) {
+		for (int i = 0; i < numOfColumns; i++) {
+			result_crossCheck->at<uchar>(j, i) = uchar(0);
+		}
+	}
+	return result_crossCheck;
 }
