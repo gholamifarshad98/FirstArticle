@@ -12,10 +12,11 @@ using namespace cv;
 using namespace std;
 using namespace std::chrono;
 shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int );
+shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , shared_ptr<Mat> , shared_ptr<Mat> , int , int );
 int numOfColumns;
 int numOfRows;
 
-void ReadBothImages(shared_ptr<Mat>, shared_ptr<Mat>);
+void ReadImages(shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat>);
 
 
 int main()
@@ -26,22 +27,36 @@ int main()
 	auto leftImage = make_shared<Mat>();
 	auto result = make_shared<Mat>();
 
+	auto rightImage1 = make_shared<Mat>();
+	auto leftImage1 = make_shared<Mat>();
+	auto result1 = make_shared<Mat>();
+
+	auto rightImage2 = make_shared<Mat>();
+	auto leftImage2 = make_shared<Mat>();
+	auto result2 = make_shared<Mat>();
+
+
 ////////////////////////////////////////////////////////////////////
 /// In this part we call readingImages function.
 ////////////////////////////////////////////////////////////////////
 	auto startImread = chrono::high_resolution_clock::now();
-	ReadBothImages(leftImage, rightImage);
+	ReadImages(leftImage, rightImage, leftImage1, rightImage1, leftImage2, rightImage2);
 	auto endImread = chrono::high_resolution_clock::now();
 	numOfRows = leftImage->rows;
 	numOfColumns = leftImage->cols;
 
 ////////////////////////////////////////////////////////////////////
-/// In this part we call stereo function.
+/// In this part we call stereo function. background
 ////////////////////////////////////////////////////////////////////
 	auto startStereo = chrono::high_resolution_clock::now();
 	try
 	{
 		result =stereo(leftImage, rightImage, kernelSize, maxDisparity);
+		result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
+		imshow("resul", *result);
+		imshow("result1", *result1);
+
+		waitKey(0);
 	}
 	catch (cv::Exception & e)
 	{
@@ -49,6 +64,22 @@ int main()
 	}
 	auto endStereo = chrono::high_resolution_clock::now();
 	
+////////////////////////////////////////////////////////////////////
+/// In this part we call stereo function. obostecle
+////////////////////////////////////////////////////////////////////
+	auto startDeprivedStereo = chrono::high_resolution_clock::now();
+	try
+	{
+		result2 = stereo(leftImage2, rightImage2,result,result1, kernelSize, maxDisparity);
+
+	}
+	catch (cv::Exception & e)
+	{
+		cerr << e.msg << endl; // output exception message
+	}
+	auto endDeprivedStereo = chrono::high_resolution_clock::now();
+
+
 ////////////////////////////////////////////////////////////////////
 /// In this part we report the results.
 ////////////////////////////////////////////////////////////////////
@@ -73,24 +104,36 @@ int main()
 	repotringResult << "duration of Totall = " << durationTotall_s << "(ms)" << endl;
 	repotringResult.close();
 
-	imwrite("resultSimpleStereo.png", *result);
+	imshow("resultDeprivedStereo.png", *result2);
+	waitKey(0);
 	return 0;
 }
 
 ////////////////////////////////////////////////////////////////////
 /// In this part we can load two Images.
 ////////////////////////////////////////////////////////////////////
-void ReadBothImages(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage) {
+void ReadImages(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, shared_ptr<Mat> leftImage1, shared_ptr<Mat> rightImage1, shared_ptr<Mat> leftImage2, shared_ptr<Mat> rightImage2) {
 	try {
-		*rightImage = imread("../data/1.png", IMREAD_GRAYSCALE);   // Read the right image
+		*rightImage = imread("../data/left1.png", IMREAD_GRAYSCALE);   // Read the right image
 		*rightImage = *rightImage;
-		*leftImage = imread("../data/2.png", IMREAD_GRAYSCALE);   // Read the left image
+		*leftImage = imread("../data/right1.png", IMREAD_GRAYSCALE);   // Read the left image
 		*leftImage = *leftImage;
-		if (!rightImage->data)                             // Check for invalid input
+
+		*rightImage1 = imread("../data/left3.png", IMREAD_GRAYSCALE);   // Read the right image
+		*rightImage1 = *rightImage1;
+		*leftImage1 = imread("../data/right3.png", IMREAD_GRAYSCALE);   // Read the left image
+		*leftImage1 = *leftImage1;
+
+		*rightImage2 = imread("../data/left2.png", IMREAD_GRAYSCALE);   // Read the right image
+		*rightImage2 = *rightImage2;
+		*leftImage2 = imread("../data/right2.png", IMREAD_GRAYSCALE);   // Read the left image
+		*leftImage2 = *leftImage2;
+
+		if (!rightImage->data | !rightImage1->data| !rightImage2->data)                             // Check for invalid input
 		{
 			throw "right";
 		}
-		if (!leftImage->data)                             // Check for invalid input
+		if (!leftImage->data| !leftImage1->data | !leftImage2->data)                             // Check for invalid input
 		{
 			throw "left";
 		}
@@ -135,6 +178,75 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 				}
 			}
 			result->at<uchar>(j, i) = uchar(255* selectDisparity/maxDisparity);
+		}
+	}
+	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
+	for (int j = 0; j < (kernelSize / 2); j++) {
+		for (int i = 0; i < numOfColumns; i++) {
+			result->at<uchar>(j, i) = uchar(1);
+		}
+	}
+
+
+	return result;
+}
+
+
+////////////////////////////////////////////////////////////////////
+/// In this part we clac deprived disparity of each pixel.
+////////////////////////////////////////////////////////////////////
+shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, shared_ptr<Mat> result1, shared_ptr<Mat> result2, int kernelSize, int maxDisparity) {
+	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
+	//Mat result;// = *rightImage;
+	int cost;
+	int tempCost;
+	int selectDisparity;
+	for (int j = (kernelSize / 2); j < numOfRows - (kernelSize / 2); j++) {
+		for (int i = (kernelSize / 2); i < numOfColumns - maxDisparity - (kernelSize / 2); i++) {
+			auto firstLimit = int(result1->at<uchar>(j, i) * maxDisparity / 255);
+			auto secondLimit = int(result2->at<uchar>(j, i) * maxDisparity / 255);
+			int lowerLimit;
+			int upperLimit;
+			if (firstLimit <= secondLimit) {
+				lowerLimit = firstLimit;
+				upperLimit = secondLimit;
+			}
+			else
+			{
+				lowerLimit = secondLimit;
+				upperLimit = firstLimit;
+			}
+			if (lowerLimit == 0) {
+				lowerLimit = 1;
+			}
+			lowerLimit = lowerLimit - 1;
+			upperLimit = upperLimit + 1;
+
+			auto tempCostLowerLimit = CalcCost(leftImage, rightImage, j, i, kernelSize, lowerLimit);
+			auto tempCostUpperLimit = CalcCost(leftImage, rightImage, j, i, kernelSize, upperLimit);
+
+			if (tempCostLowerLimit < tempCostUpperLimit) {
+				tempCost = tempCostLowerLimit;
+				selectDisparity = lowerLimit;
+			}
+			else
+			{
+				tempCost = tempCostUpperLimit;
+				selectDisparity = upperLimit;
+			}
+			
+			for (int k = lowerLimit; k <= upperLimit; k++) {
+				cost = CalcCost(leftImage, rightImage, j, i, kernelSize, k);
+				if (cost < tempCost) {
+					tempCost = cost;
+					selectDisparity = k;
+				}
+			}
+
+			if (selectDisparity==upperLimit || selectDisparity==lowerLimit) {
+				result->at<uchar>(j, i) = uchar(255);
+			}
+			
 		}
 	}
 	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
