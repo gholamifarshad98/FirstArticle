@@ -46,7 +46,7 @@ int main()
 	auto startCuttedSSD = chrono::high_resolution_clock::now();
 	try
 	{
-		result_cutted = cuttedSSD(leftImage, rightImage, kernelSize, maxDisparity,12);
+		result_cutted = cuttedSSD(leftImage, rightImage, kernelSize, maxDisparity,10);
 		imwrite("cuttedSSD.png", *result_cutted);
 	}
 	catch (cv::Exception & e)
@@ -62,7 +62,7 @@ int main()
 	auto startCuttedSSDCrossCheck = chrono::high_resolution_clock::now();
 	try
 	{
-		result_cutted_crossCheck = cuttedSSDCrossCheck(leftImage, rightImage, kernelSize, maxDisparity, 12);
+		result_cutted_crossCheck = cuttedSSDCrossCheck(leftImage, rightImage, kernelSize, maxDisparity, 10);
 		imwrite("cuttedSSDCrossCheck.png", *result_cutted_crossCheck);
 	}
 	catch (cv::Exception & e)
@@ -76,8 +76,8 @@ int main()
 /// In this part we will fillter the results.
 ////////////////////////////////////////////////////////////////////
 	auto startFilltering = chrono::high_resolution_clock::now();
-	int _fillterSizeU = 8;
-	int _fillterSizeV = 8;
+	int _fillterSizeU = 16;
+	int _fillterSizeV = 4;
 	int _threshold = 30;
 	auto result_cutted_crossCheck_fillterde = fillteringResult(result_cutted_crossCheck, _fillterSizeU, _fillterSizeV, maxDisparity, _threshold);
 
@@ -124,6 +124,8 @@ int main()
 	repotringResult << "Image numOfColumns = " << numOfColumns << endl;
 	repotringResult << "kernel size is = " << kernelSize << endl;
 	repotringResult << "maxDisparity is = " << maxDisparity << endl;
+	repotringResult << "filter size is = ( " << _fillterSizeU <<"," << _fillterSizeV<<" )"<<endl;
+	repotringResult << "filter threshold is = " << _threshold << endl;
 	repotringResult << "duration of Reading Images = " << durationImread_s << "(ms)" << endl;
 	repotringResult << "duration of cuttedSSD = " <<durationSSDCutted_s <<"(ms)"<< endl;
 	repotringResult << "duration of cuttedSSD with cross check = " << durationSSDCuttedCrossCheck_s << "(ms)" << endl;
