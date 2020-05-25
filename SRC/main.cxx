@@ -12,7 +12,7 @@ using namespace cv;
 using namespace std;
 using namespace std::chrono;
 shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int );
-shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , shared_ptr<Mat> , shared_ptr<Mat> , int , int );
+shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , shared_ptr<Mat> , int , int );
 int numOfColumns;
 int numOfRows;
 
@@ -52,9 +52,9 @@ int main()
 	try
 	{
 		result =stereo(leftImage, rightImage, kernelSize, maxDisparity);
-		result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
+		//result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
 		imshow("resul", *result);
-		imshow("result1", *result1);
+		//imshow("result1", *result1);
 
 		waitKey(0);
 	}
@@ -70,7 +70,7 @@ int main()
 	auto startDeprivedStereo = chrono::high_resolution_clock::now();
 	try
 	{
-		result2 = stereo(leftImage2, rightImage2,result,result1, kernelSize, maxDisparity);
+		result2 = stereo(leftImage2, rightImage2,result, kernelSize, maxDisparity);
 
 	}
 	catch (cv::Exception & e)
@@ -195,58 +195,38 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 ////////////////////////////////////////////////////////////////////
 /// In this part we clac deprived disparity of each pixel.
 ////////////////////////////////////////////////////////////////////
-shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, shared_ptr<Mat> result1, shared_ptr<Mat> result2, int kernelSize, int maxDisparity) {
+shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , shared_ptr<Mat> result_in, int kernelSize, int maxDisparity) {
 	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
 	//Mat result;// = *rightImage;
 	int cost;
 	int tempCost;
 	int selectDisparity;
+	int lowerLimit;
+	int upperLimit;
 	for (int j = (kernelSize / 2); j < numOfRows - (kernelSize / 2); j++) {
 		for (int i = (kernelSize / 2); i < numOfColumns - maxDisparity - (kernelSize / 2); i++) {
-			auto firstLimit = int(result1->at<uchar>(j, i) * maxDisparity / 255);
-			auto secondLimit = int(result2->at<uchar>(j, i) * maxDisparity / 255);
-			int lowerLimit;
-			int upperLimit;
-			if (firstLimit <= secondLimit) {
-				lowerLimit = firstLimit;
-				upperLimit = secondLimit;
-			}
-			else
-			{
-				lowerLimit = secondLimit;
-				upperLimit = firstLimit;
-			}
-			if (lowerLimit == 0) {
+			auto limitedDis = int(result_in->at<uchar>(j, i) * maxDisparity / 255);
+			if (limitedDis == 0) {
 				lowerLimit = 1;
 			}
-			lowerLimit = lowerLimit - 1;
-			upperLimit = upperLimit + 1;
+			upperLimit = limitedDis + 1;
+			lowerLimit = limitedDis - 1;
+			if (lowerLimit <= 0) {
+				result->at<uchar>(j, i) = uchar(0);
+				continue;
+			}
 
 			auto tempCostLowerLimit = CalcCost(leftImage, rightImage, j, i, kernelSize, lowerLimit);
+			auto tempCost = CalcCost(leftImage, rightImage, j, i, kernelSize, lowerLimit+1);
 			auto tempCostUpperLimit = CalcCost(leftImage, rightImage, j, i, kernelSize, upperLimit);
 
-			if (tempCostLowerLimit < tempCostUpperLimit) {
-				tempCost = tempCostLowerLimit;
-				selectDisparity = lowerLimit;
+			if (tempCostLowerLimit <= tempCost && tempCost <= tempCostUpperLimit) {
+				result->at<uchar>(j, i) = uchar(0);
 			}
 			else
 			{
-				tempCost = tempCostUpperLimit;
-				selectDisparity = upperLimit;
-			}
-			
-			for (int k = lowerLimit; k <= upperLimit; k++) {
-				cost = CalcCost(leftImage, rightImage, j, i, kernelSize, k);
-				if (cost < tempCost) {
-					tempCost = cost;
-					selectDisparity = k;
-				}
-			}
-
-			if (selectDisparity==upperLimit || selectDisparity==lowerLimit) {
 				result->at<uchar>(j, i) = uchar(255);
 			}
-			
 		}
 	}
 	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
