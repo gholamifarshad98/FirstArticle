@@ -51,9 +51,9 @@ int main()
 	auto startStereo = chrono::high_resolution_clock::now();
 	try
 	{
-		result =stereo(leftImage, rightImage, kernelSize, maxDisparity);
+		result1 =stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
 		//result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
-		imshow("resul", *result);
+		imshow("resul", *result1);
 		//imshow("result1", *result1);
 
 		waitKey(0);
@@ -70,7 +70,7 @@ int main()
 	auto startDeprivedStereo = chrono::high_resolution_clock::now();
 	try
 	{
-		result2 = stereo(leftImage2, rightImage2,result, kernelSize, maxDisparity);
+		result = stereo(leftImage, rightImage,result1, kernelSize, maxDisparity);
 
 	}
 	catch (cv::Exception & e)
@@ -104,7 +104,7 @@ int main()
 	repotringResult << "duration of Totall = " << durationTotall_s << "(ms)" << endl;
 	repotringResult.close();
 
-	imshow("resultDeprivedStereo.png", *result2);
+	imshow("resultDeprivedStereo.png", *result);
 	waitKey(0);
 	return 0;
 }
@@ -114,26 +114,26 @@ int main()
 ////////////////////////////////////////////////////////////////////
 void ReadImages(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, shared_ptr<Mat> leftImage1, shared_ptr<Mat> rightImage1, shared_ptr<Mat> leftImage2, shared_ptr<Mat> rightImage2) {
 	try {
-		*rightImage = imread("../data/left1.png", IMREAD_GRAYSCALE);   // Read the right image
+		*rightImage = imread("../data/left_6.png", IMREAD_GRAYSCALE);   // Read the right image
 		*rightImage = *rightImage;
-		*leftImage = imread("../data/right1.png", IMREAD_GRAYSCALE);   // Read the left image
+		*leftImage = imread("../data/right_6.png", IMREAD_GRAYSCALE);   // Read the left image
 		*leftImage = *leftImage;
 
-		*rightImage1 = imread("../data/left3.png", IMREAD_GRAYSCALE);   // Read the right image
+		*rightImage1 = imread("../data/left_5.png", IMREAD_GRAYSCALE);   // Read the right image
 		*rightImage1 = *rightImage1;
-		*leftImage1 = imread("../data/right3.png", IMREAD_GRAYSCALE);   // Read the left image
+		*leftImage1 = imread("../data/right_5.png", IMREAD_GRAYSCALE);   // Read the left image
 		*leftImage1 = *leftImage1;
 
-		*rightImage2 = imread("../data/left2.png", IMREAD_GRAYSCALE);   // Read the right image
+		*rightImage2 = imread("../data/left_0.png", IMREAD_GRAYSCALE);   // Read the right image
 		*rightImage2 = *rightImage2;
-		*leftImage2 = imread("../data/right2.png", IMREAD_GRAYSCALE);   // Read the left image
+		*leftImage2 = imread("../data/right_0.png", IMREAD_GRAYSCALE);   // Read the left image
 		*leftImage2 = *leftImage2;
 
 		if (!rightImage->data | !rightImage1->data| !rightImage2->data)                             // Check for invalid input
 		{
 			throw "right";
 		}
-		if (!leftImage->data| !leftImage1->data | !leftImage2->data)                             // Check for invalid input
+		if (!leftImage->data| !leftImage1->data| !leftImage2->data)                             // Check for invalid input
 		{
 			throw "left";
 		}
