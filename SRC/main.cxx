@@ -8,11 +8,14 @@
 #include <chrono> 
 #include <string> 
 #include<fstream>
+
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
-shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int );
-shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , shared_ptr<Mat> , int , int );
+shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int , shared_ptr<vector<shared_ptr<Mat>>>);
+shared_ptr<Mat> stereo(shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat> , shared_ptr<Mat>, shared_ptr<vector<shared_ptr<Mat>>>, shared_ptr<vector<shared_ptr<Mat>>>, int , int );
+void setLimits(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int, int*, int*);
+
 int numOfColumns;
 int numOfRows;
 
@@ -49,12 +52,17 @@ int main()
 /// In this part we call stereo function. background
 ////////////////////////////////////////////////////////////////////
 	auto startStereo = chrono::high_resolution_clock::now();
+	auto costsLayerVector_1 = make_shared<vector<shared_ptr<Mat>>>();
+	auto costsLayerVector_2 = make_shared<vector<shared_ptr<Mat>>>();
 	try
 	{
-		result1 =stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
-		//result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity);
-		imshow("resul", *result1);
-		//imshow("result1", *result1);
+		
+		result1 =stereo(leftImage1, rightImage1, kernelSize, maxDisparity, costsLayerVector_1);
+
+		
+		result2 = stereo(leftImage2, rightImage2, kernelSize, maxDisparity, costsLayerVector_2);
+		imshow("resul1", *result1);
+		imshow("result2", *result2);
 
 		waitKey(0);
 	}
@@ -70,7 +78,7 @@ int main()
 	auto startDeprivedStereo = chrono::high_resolution_clock::now();
 	try
 	{
-		result = stereo(leftImage, rightImage,result1, kernelSize, maxDisparity);
+		result = stereo(leftImage, rightImage, result1, result2, costsLayerVector_1, costsLayerVector_2, kernelSize, maxDisparity);
 
 	}
 	catch (cv::Exception & e)
@@ -160,18 +168,25 @@ int CalcCost(shared_ptr<Mat> _leftImage, shared_ptr<Mat> _rightImage, int row, i
 ////////////////////////////////////////////////////////////////////
 /// In this part we clac disparity of each pixel.
 ////////////////////////////////////////////////////////////////////
-shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity) {
+shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, int kernelSize, int maxDisparity, shared_ptr<vector<shared_ptr<Mat>>> output) {
 	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
-	//Mat result;// = *rightImage;
+
+	auto costsLayerVector = make_shared<vector<shared_ptr<Mat>>>();
+	for (size_t layer = 0; layer < maxDisparity; layer++) {
+		costsLayerVector->push_back(make_shared<Mat>(numOfRows, numOfColumns, CV_8UC1));
+	}
+
 	int cost;
 	int tempCost;
 	int selectDisparity;
 	for (int j = (kernelSize / 2); j < numOfRows - (kernelSize / 2); j++) {
 		for (int i = (kernelSize / 2); i < numOfColumns - maxDisparity - (kernelSize / 2); i++) {
 			tempCost = CalcCost(leftImage, rightImage, j, i, kernelSize, 0);
+			(*costsLayerVector)[0]->at<int>(j, i) = tempCost;
 			selectDisparity = 0;
 			for (int k = 1; k < maxDisparity; k++) {
 				cost = CalcCost(leftImage, rightImage, j, i, kernelSize, k);
+				(*costsLayerVector)[k]->at<int>(j, i) = cost;
 				if (cost < tempCost) {
 					tempCost = cost;
 					selectDisparity = k;
@@ -183,10 +198,10 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
 	for (int j = 0; j < (kernelSize / 2); j++) {
 		for (int i = 0; i < numOfColumns; i++) {
-			result->at<uchar>(j, i) = uchar(1);
+			result->at<uchar>(j, i) = uchar(0);
 		}
 	}
-
+	output = costsLayerVector;
 
 	return result;
 }
@@ -195,9 +210,9 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 ////////////////////////////////////////////////////////////////////
 /// In this part we clac deprived disparity of each pixel.
 ////////////////////////////////////////////////////////////////////
-shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , shared_ptr<Mat> result_in, int kernelSize, int maxDisparity) {
+shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , shared_ptr<Mat> result_in1, shared_ptr<Mat> result_in2, shared_ptr<vector<shared_ptr<Mat>>>costVec_1, shared_ptr<vector<shared_ptr<Mat>>> costVec_2, int kernelSize, int maxDisparity) {
 	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
-	//Mat result;// = *rightImage;
+
 	int cost;
 	int tempCost;
 	int selectDisparity;
@@ -205,28 +220,18 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , s
 	int upperLimit;
 	for (int j = (kernelSize / 2); j < numOfRows - (kernelSize / 2); j++) {
 		for (int i = (kernelSize / 2); i < numOfColumns - maxDisparity - (kernelSize / 2); i++) {
-			auto limitedDis = int(result_in->at<uchar>(j, i) * maxDisparity / 255);
-			if (limitedDis == 0) {
-				lowerLimit = 1;
-			}
-			upperLimit = limitedDis + 1;
-			lowerLimit = limitedDis - 1;
-			if (lowerLimit <= 0) {
-				result->at<uchar>(j, i) = uchar(0);
-				continue;
+			setLimits(result_in1, result_in2, i, j, maxDisparity, &lowerLimit, &upperLimit);
+			auto vecCost_1 = make_shared<vector<int>>();
+			auto vecCost_2 = make_shared<vector<int>>();
+			auto vecCurCost = make_shared<vector<int>>();
+
+			for (int layer = lowerLimit; i <= upperLimit; layer++) {
+				vecCurCost->push_back(CalcCost(leftImage, rightImage, j, i, kernelSize, layer));
+				vecCost_1->push_back((*costVec_1)[layer]->at<int>(j, i));
+				vecCost_2->push_back((*costVec_2)[layer]->at<int>(j, i));
 			}
 
-			auto tempCostLowerLimit = CalcCost(leftImage, rightImage, j, i, kernelSize, lowerLimit);
-			auto tempCost = CalcCost(leftImage, rightImage, j, i, kernelSize, lowerLimit+1);
-			auto tempCostUpperLimit = CalcCost(leftImage, rightImage, j, i, kernelSize, upperLimit);
 
-			if (tempCostLowerLimit <= tempCost && tempCost <= tempCostUpperLimit) {
-				result->at<uchar>(j, i) = uchar(0);
-			}
-			else
-			{
-				result->at<uchar>(j, i) = uchar(255);
-			}
 		}
 	}
 	// ITs added for removing top of image that is not solved in stereo maching, becase of kernelsize.
@@ -239,3 +244,28 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , s
 
 	return result;
 }
+
+void setLimits(shared_ptr<Mat> resu_1, shared_ptr<Mat> resu_2, int i, int j,int maxDisparity, int* lowLim, int* upLim) {
+
+	auto lim_1 = int(resu_1->at<uchar>(j, i) * maxDisparity / 255);
+	auto lim_2 = int(resu_2->at<uchar>(j, i) * maxDisparity / 255);
+
+	if (lim_2 <= lim_1) {
+		int a = lim_2;
+		lim_2 = lim_1;
+		lim_1 = a;
+	}
+	lim_1 = lim_1 - 1;
+	lim_2 = lim_1 + 1;
+	if (lim_1 < 0) {
+		lim_1 = 0;
+	}
+	if (lim_2>maxDisparity)
+	{
+		lim_2 = maxDisparity;
+	}
+	*lowLim = lim_1;
+	*upLim = lim_2;
+
+}
+
