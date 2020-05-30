@@ -21,7 +21,7 @@ message(STATUS "    libraries: ${OpenCV_LIBS}")
 message(STATUS "    include path: ${OpenCV_INCLUDE_DIRS}")
 
 # Declare the executable target built from your sources
-add_executable(${PROJECT_NAME} main.cxx)
+add_executable(${PROJECT_NAME} main.cxx mathOp.cxx mathOp.hxx)
 
 
 # Link your application with OpenCV libraries
