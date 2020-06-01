@@ -8,12 +8,13 @@
 #include <chrono> 
 #include <string> 
 #include<fstream>
+#include <map>
 #include "mathOp.hxx"
 using namespace cv;
 using namespace std;
 using namespace std::chrono;
 shared_ptr<Mat> stereo(shared_ptr<Mat> , shared_ptr<Mat> , int , int , shared_ptr<vector<shared_ptr<Mat>>>);
-shared_ptr<Mat> stereo(shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat> , shared_ptr<Mat>, shared_ptr<vector<shared_ptr<Mat>>>, shared_ptr<vector<shared_ptr<Mat>>>, int , int );
+shared_ptr<Mat> stereo(shared_ptr<Mat>, shared_ptr<Mat>, shared_ptr<Mat> , shared_ptr<Mat>, shared_ptr<vector<shared_ptr<Mat>>>, shared_ptr<vector<shared_ptr<Mat>>>, int , int ,double);
 void setLimits(shared_ptr<Mat>, shared_ptr<Mat>, int, int, int, int*, int*);
 
 int numOfColumns;
@@ -53,12 +54,10 @@ int main()
 	auto startStereo = chrono::high_resolution_clock::now();
 	auto costsLayerVector_1 = make_shared<vector<shared_ptr<Mat>>>();
 	auto costsLayerVector_2 = make_shared<vector<shared_ptr<Mat>>>();
-	//result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity, costsLayerVector_1);
-	//result2 = stereo(leftImage2, rightImage2, kernelSize, maxDisparity, costsLayerVector_2);
-	//cout << "ccvvcv" << (*costsLayerVector_1).size() << endl;
 	try
 	{
 		result1 = stereo(leftImage1, rightImage1, kernelSize, maxDisparity, costsLayerVector_1);
+		imwrite("result_1_deprived.png", *result1);
 	}
 	catch (cv::Exception & e)
 	{
@@ -67,16 +66,18 @@ int main()
 	try{
 
 		result2 = stereo(leftImage2, rightImage2, kernelSize, maxDisparity, costsLayerVector_2);
+		imwrite("result_2_deprived.png", *result2);
+
 	}
 	catch (cv::Exception & e)
 	{
 		cerr << e.msg << endl; // output exception message
 	}
 	try{
-		imshow("resul1", *result1);
+		/*imshow("resul1", *result1);
 		imshow("result2", *result2);
 
-		waitKey(0);
+		waitKey(0);*/
 	}
 	catch (cv::Exception & e)
 	{
@@ -87,46 +88,62 @@ int main()
 ////////////////////////////////////////////////////////////////////
 /// In this part we call stereo function. obostecle
 ////////////////////////////////////////////////////////////////////
-	//result = stereo(leftImage, rightImage, result1, result2, costsLayerVector_1, costsLayerVector_2, kernelSize, maxDisparity);
-	auto startDeprivedStereo = chrono::high_resolution_clock::now();
-	try
-	{
-		result = stereo(leftImage, rightImage, result1, result2, costsLayerVector_1, costsLayerVector_2, kernelSize, maxDisparity);
+
+	auto timeResults = make_shared<map<string, string>>();
+
+	for (double threshold = 0.2; threshold < 1; threshold= threshold+0.1) {
+
+
+		auto startDeprivedStereo = chrono::high_resolution_clock::now();
+		try
+		{
+			result = stereo(leftImage, rightImage, result1, result2, costsLayerVector_1, costsLayerVector_2, kernelSize, maxDisparity, threshold);
+			string resultName;
+			resultName = "result_deprivedStereo_" + to_string(threshold) + ".png";
+			imwrite(resultName, *result);
+			waitKey(0);
+		}
+		catch (cv::Exception & e)
+		{
+			cerr << e.msg << endl; // output exception message
+		}
+		auto endDeprivedStereo = chrono::high_resolution_clock::now();
+		std::chrono::duration<int, std::milli> DurationDeprivedStereo = duration_cast<milliseconds>(endDeprivedStereo - startDeprivedStereo);
+
+		auto valueDurationDeprivedStereo = DurationDeprivedStereo.count();
+		string valueDurationDeprivedStereo_s = to_string(valueDurationDeprivedStereo);
+		string reportingText = to_string(threshold) + "    ";
+		timeResults->insert(pair<string, string>(reportingText, valueDurationDeprivedStereo_s));
 
 	}
-	catch (cv::Exception & e)
-	{
-		cerr << e.msg << endl; // output exception message
-	}
-	auto endDeprivedStereo = chrono::high_resolution_clock::now();
-	
 
 ////////////////////////////////////////////////////////////////////
 /// In this part we report the results.
 ////////////////////////////////////////////////////////////////////
 	std::chrono::duration<int, std::milli> durationImread = duration_cast<milliseconds>(endImread - startImread);
-	std::chrono::duration<int, std::milli> durationStero= duration_cast<milliseconds>(endStereo - startStereo);
-	std::chrono::duration<int, std::milli> durationTotall = durationStero + durationImread;
 	auto valueImread = durationImread.count();
 	string durationImread_s = to_string(valueImread);
-	auto valueStereo = durationStero.count();
-	string durationStero_s = to_string(valueStereo);
-	auto valueTotall = durationTotall.count();
-	string durationTotall_s = to_string(valueTotall);
+
+	std::chrono::duration<int, std::milli> durationStereo = duration_cast<milliseconds>(endStereo - startStereo);
+	auto valueStereo = durationStereo.count();
+	string durationStereo_s = to_string(valueStereo);
+	cout << "every thing is done" << endl;
 	//Object for repoting results in a text file.
 	ofstream repotringResult;
-	repotringResult.open("resultsSimpleSccctereo.txt");
+	repotringResult.open("deprivedStereo.txt");
 	repotringResult << "Image numOfRows = " << numOfRows << endl;
 	repotringResult << "Image numOfColumns = " << numOfColumns << endl;
 	repotringResult << "kernel size is = " << kernelSize << endl;
 	repotringResult << "maxDisparity is = " << maxDisparity << endl;
 	repotringResult << "duration of Reading Images = " << durationImread_s << "(ms)" << endl;
-	repotringResult << "duration of Stereo = " << durationStero_s <<"(ms)"<< endl;
-	repotringResult << "duration of Totall = " << durationTotall_s << "(ms)" << endl;
+	repotringResult << "duration of two Stereos = " << durationStereo_s <<"(ms)"<< endl;
+	repotringResult << "duration of each deprived Stereo (ms) " << endl;
+	map<string, string>::iterator itr;
+	for (itr = timeResults->begin(); itr != timeResults->end();itr++) {
+		repotringResult << itr->first << itr->second << endl;
+	}
 	repotringResult.close();
-
-	imshow("resultDeprivedStereo png", *result);
-	waitKey(0);
+	cout << "every thing is done" << endl;
 	return 0;
 }
 
@@ -228,7 +245,7 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage, in
 ////////////////////////////////////////////////////////////////////
 /// In this part we clac deprived disparity of each pixel.
 ////////////////////////////////////////////////////////////////////
-shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , shared_ptr<Mat> result_in1, shared_ptr<Mat> result_in2, shared_ptr<vector<shared_ptr<Mat>>>costVec_1, shared_ptr<vector<shared_ptr<Mat>>> costVec_2, int kernelSize, int maxDisparity) {
+shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , shared_ptr<Mat> result_in1, shared_ptr<Mat> result_in2, shared_ptr<vector<shared_ptr<Mat>>>costVec_1, shared_ptr<vector<shared_ptr<Mat>>> costVec_2, int kernelSize, int maxDisparity,double threshold) {
 	auto result = make_shared<Mat>(numOfRows, numOfColumns, CV_8U);
 	auto calculator = make_shared<mathOp>();
 
@@ -249,7 +266,7 @@ shared_ptr<Mat> stereo(shared_ptr<Mat> leftImage, shared_ptr<Mat> rightImage , s
 				vecCost_2->push_back((*costVec_2)[layer]->at<int>(j, i));
 			}
 
-			if (abs(calculator->calcCorro(*vecCurCost, *vecCost_1)) < 0.2) {
+			if (abs(calculator->calcCorro(*vecCurCost, *vecCost_1)) < threshold) {
 				
 				result->at<uchar>(j, i) = uchar(0);
 			}
